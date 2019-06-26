@@ -11,6 +11,7 @@ using System.Net.Http;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Azure.Services.AppAuthentication;
+using apimFunctions;
 
 namespace Microsoft.FastTrack
 {
@@ -45,9 +46,9 @@ namespace Microsoft.FastTrack
 
             //Build REST client
             HttpClient client = new HttpClient();
-            string url = $"https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{apimResourceGroup}/providers/Microsoft.ApiManagement/service/{apimInstance}/subscriptions";
+            string subscriptionUrl = $"https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{apimResourceGroup}/providers/Microsoft.ApiManagement/service/{apimInstance}/subscriptions";
             string urlParameters = "?api-version=2019-01-01";
-            client.BaseAddress = new Uri(url);            
+            client.BaseAddress = new Uri(subscriptionUrl);            
             client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
             client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
             try {
@@ -58,19 +59,33 @@ namespace Microsoft.FastTrack
                 log.LogInformation("Retrieved subscription keys");
                 
                 List<Value> resultValues = new List<Value>(resultJson.value);
-                bool apiKeyFound = resultValues.Where(m => m.properties.primaryKey == apiKey).FirstOrDefault() is null ?
-                    resultValues.Where(m => m.properties.secondaryKey == apiKey).FirstOrDefault() is null ? false : true 
-                    : true;
+                var subscription = resultValues.Where(m => m.properties.primaryKey == apiKey).FirstOrDefault() is null ?
+                    resultValues.Where(m => m.properties.secondaryKey == apiKey).FirstOrDefault() is null ? null : resultValues.Where(m => m.properties.secondaryKey == apiKey).FirstOrDefault()
+                    : resultValues.Where(m => m.properties.primaryKey == apiKey).FirstOrDefault();
+                bool apiKeyFound = subscription != null ? true : false;
+
                 log.LogInformation($"apiKeyFound: {apiKeyFound.ToString()}");
+                //If the apiKey was found, get the associated user object too and return
+                if (apiKeyFound)
+                {
+                    HttpClient userClient = new HttpClient();
+                    string clientUrl = $"https://management.azure.com{subscription.properties.ownerId}";
+                    userClient.BaseAddress = new Uri(clientUrl);
+                    userClient.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                    userClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
+                    var userInfo = userClient.GetStringAsync(urlParameters).Result;
+                    var userResult = JsonConvert.DeserializeObject<ApimUser>(userInfo);
+                    
+                    return (ActionResult)new OkObjectResult(JsonConvert.SerializeObject(userResult.properties));
+                }
                 //If the API Key was found in the subscription list, pass back a 202 (Accepted) , else 401 (Unauthorized)
-                return apiKeyFound ? (ActionResult)new AcceptedResult()
-                : new UnauthorizedResult();
+                return new UnauthorizedResult();
             }
             catch (Exception ex)
             {
                 log.LogError("Exception caught in function execution",ex);
                 log.LogError(ex.Message + ex.StackTrace);
-                return new UnauthorizedResult();
+                return new BadRequestObjectResult(ex.Message);
             }
         }
         private static async Task<string> GetAccessToken(string tenantId, ILogger log)
