@@ -12,6 +12,12 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Azure.Services.AppAuthentication;
 using apimFunctions;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Principal;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+
 
 namespace Microsoft.FastTrack
 {
@@ -94,6 +100,14 @@ namespace Microsoft.FastTrack
             {
                 var azureServiceTokenProvider = new AzureServiceTokenProvider();
                 var accessToken = await azureServiceTokenProvider.GetAccessTokenAsync("https://management.azure.com",tenantId);
+                bool isValidToken = false;
+                try
+                {
+                    isValidToken = ValidateAccessToken(accessToken);
+                }
+                catch (Exception ex)
+                { }
+
                 return accessToken;
             }
             catch (Exception ex)
@@ -102,6 +116,18 @@ namespace Microsoft.FastTrack
                 throw ex;
             }
 
+        }
+        
+    //    private static async Task<bool> ValidateAccessToken(string token)
+        private static bool ValidateAccessToken(string token)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var jtoken = tokenHandler.ReadToken(token) as JwtSecurityToken;
+            if (DateTime.Now < jtoken.ValidTo)
+            {
+                return true;
+            }
+            return false;
         }
     }
 }
