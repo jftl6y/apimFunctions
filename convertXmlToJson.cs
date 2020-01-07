@@ -40,21 +40,26 @@ namespace Microsoft.FastTrack
                 const string xPathQuery = "/soapenv:Envelope/soapenv:Body/yfc:ItemList/yfc:Item";
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
+                //Load request body into an XmlDocument
                 System.Xml.XmlDocument doc = new System.Xml.XmlDocument();
                 doc.LoadXml(requestBody);
-
-                XmlAttribute jsonArrayAttribute = doc.CreateAttribute("json","Array", jsonNsToken);
-                jsonArrayAttribute.Value = "true";
-                doc.DocumentElement.SetAttribute("xmlns:json", jsonNsToken);
+                           
+                //Add the namespace to the manager
                 XmlNamespaceManager nsmgr = new XmlNamespaceManager(doc.NameTable);
                 nsmgr.AddNamespace("soapenv", soapEnvNsToken);
                 nsmgr.AddNamespace("yfc", lineItemNsToken);
+                //Search for the items nodes
                 XmlNodeList items = doc.SelectNodes(xPathQuery, nsmgr);
-                foreach (XmlNode item in items)
+                //If there is only one item, add the json:Array attribute
+                if (items != null && items.Count == 1)
                 {
-                    item.Attributes.SetNamedItem(jsonArrayAttribute);
+                    XmlAttribute jsonArrayAttribute = doc.CreateAttribute("json", "Array", jsonNsToken);
+                    jsonArrayAttribute.Value = "true";
+                    doc.DocumentElement.SetAttribute("xmlns:json", jsonNsToken);
+                    items[0].Attributes.SetNamedItem(jsonArrayAttribute);
                 }
 
+                //Serialize the Xml to JSON
                 string convertFromXml = JsonConvert.SerializeXmlNode(doc);
                 return (ActionResult)new OkObjectResult(convertFromXml);
             }
