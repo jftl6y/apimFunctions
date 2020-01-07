@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.IO;
 using Newtonsoft.Json;
-
+using System.Xml;
+using System.Xml.Schema;
 
 namespace Microsoft.FastTrack
 {
@@ -25,26 +26,35 @@ namespace Microsoft.FastTrack
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
-            try { 
-                /*
-                const string soapEnvelopeToken = "<soapenv:Envelope";
-                const string xmlnsToken = "xmlns:json='http://james.newtonking.com/projects/json'";
-                const string itemToken = "<yfc:Item ";
-                const string jsonArrayToken = " json:Array='true' ";
+            try
+            {
+                /* Use this block to pull token values from environment variables
+                string soapEnvNsToken = Environment.GetEnvironmentVariable("soapEnvNsToken");
+                string jsonNsToken = Environment.GetEnvironmentVariable("jsonNsToken");
+                string lineItemNsToken = Environment.GetEnvironmentVariable("lineItemNsToken");
+                string xPathQuery = Environment.GetEnvironmentVariable("xPathQuery");
                 */
-                string soapEnvelopeToken = Environment.GetEnvironmentVariable("soapEnvelopeToken");
-                string xmlnsToken = Environment.GetEnvironmentVariable("xmlnsToken");
-                string itemToken = Environment.GetEnvironmentVariable("itemToken");
-                string jsonArrayToken = Environment.GetEnvironmentVariable("jsonArrayToken");
-
+                const string soapEnvNsToken = "http://schemas.xmlsoap.org/soap/envelope/";
+                const string jsonNsToken = "http://james.newtonking.com/projects/json";
+                const string lineItemNsToken = "http://www.yantra.com/xapidocs/pricingservice/pricingservicerequest";
+                const string xPathQuery = "/soapenv:Envelope/soapenv:Body/yfc:ItemList/yfc:Item";
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
-                requestBody = requestBody.Replace(soapEnvelopeToken, $"{soapEnvelopeToken} {xmlnsToken}");
-                requestBody = requestBody.Replace(itemToken, $"{itemToken} {jsonArrayToken}");
-                
                 System.Xml.XmlDocument doc = new System.Xml.XmlDocument();
                 doc.LoadXml(requestBody);
-                
+
+                XmlAttribute jsonArrayAttribute = doc.CreateAttribute("json","Array", jsonNsToken);
+                jsonArrayAttribute.Value = "true";
+                doc.DocumentElement.SetAttribute("xmlns:json", jsonNsToken);
+                XmlNamespaceManager nsmgr = new XmlNamespaceManager(doc.NameTable);
+                nsmgr.AddNamespace("soapenv", soapEnvNsToken);
+                nsmgr.AddNamespace("yfc", lineItemNsToken);
+                XmlNodeList items = doc.SelectNodes(xPathQuery, nsmgr);
+                foreach (XmlNode item in items)
+                {
+                    item.Attributes.SetNamedItem(jsonArrayAttribute);
+                }
+
                 string convertFromXml = JsonConvert.SerializeXmlNode(doc);
                 return (ActionResult)new OkObjectResult(convertFromXml);
             }

@@ -106,7 +106,7 @@ namespace Microsoft.FastTrack
                     isValidToken = ValidateAccessToken(accessToken);
                 }
                 catch (Exception ex)
-                { }
+                { throw ex; }
 
                 return accessToken;
             }
